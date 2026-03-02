@@ -1,98 +1,95 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState } from "react";
+import { View, Text, Button, ScrollView, ActivityIndicator } from "react-native";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
+import { useRouter } from "expo-router";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+// IMPORTANT: this file is at app/(tabs)/index.tsx
+// so we need to go up TWO levels to reach src/api
+import { analyzePdfBase64, healthCheck } from "../src/api/medexplain";
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const router = useRouter();
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const [status, setStatus] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<any>(null);
+
+  async function onCheckServer() {
+    try {
+      setStatus("Checking server...");
+      const res = await healthCheck();
+      setStatus(`Server OK: ${res.status}`);
+    } catch (e: any) {
+      setStatus(`Server error: ${e?.message ?? String(e)}`);
+    }
+  }
+
+  async function onPickAndAnalyzePdf() {
+    try {
+      setResult(null);
+      setStatus("");
+      setLoading(true);
+
+      const picked = await DocumentPicker.getDocumentAsync({
+        type: ["application/pdf"],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (picked.canceled) {
+        setStatus("Canceled");
+        return;
+      }
+
+      const file = picked.assets?.[0];
+      if (!file?.uri) {
+        setStatus("No file selected");
+        return;
+      }
+
+      setStatus(`Selected: ${file.name ?? "upload.pdf"}`);
+
+      const base64 = await FileSystem.readAsStringAsync(file.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      setStatus("Analyzing...");
+      // (optional) pass filename if your API supports it:
+      // const apiResult = await analyzePdfBase64(base64, file.name ?? "upload.pdf");
+      const apiResult = await analyzePdfBase64(base64);
+
+      setResult(apiResult);
+      setStatus("Done ✅");
+    } catch (e: any) {
+      setStatus(`Error: ${e?.message ?? String(e)}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <View style={{ flex: 1, padding: 16, gap: 10 }}>
+      <Text style={{ fontSize: 22, fontWeight: "600" }}>MedExplain</Text>
+
+      <Button title="Check server" onPress={onCheckServer} />
+      <Button title="Pick PDF and analyze" onPress={onPickAndAnalyzePdf} />
+
+      {/* Cast for strict typed routes setups */}
+      <Button title="History" onPress={() => router.push("/history" as any)} />
+
+      {!!status && <Text style={{ marginTop: 8 }}>{status}</Text>}
+      {loading && <ActivityIndicator size="large" style={{ marginTop: 10 }} />}
+
+      <ScrollView style={{ marginTop: 16 }}>
+        {result ? (
+          <Text selectable style={{ fontSize: 12, lineHeight: 18 }}>
+            {JSON.stringify(result, null, 2)}
+          </Text>
+        ) : (
+          <Text style={{ color: "#666" }}>Result will appear here…</Text>
+        )}
+      </ScrollView>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-});

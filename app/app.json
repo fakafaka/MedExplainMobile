@@ -9,7 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "MedExplain uses the camera to scan medical documents for analysis.",
+        "NSPhotoLibraryUsageDescription": "MedExplain accesses your photo library to upload medical document images for analysis."
+      }
     },
     "android": {
       "adaptiveIcon": {
