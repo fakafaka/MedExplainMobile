@@ -119,10 +119,21 @@ export default function HomeScreen() {
       setPhase("DONE");
       setStatus("Done ✅");
     } catch (e: any) {
-      setUploadProgress(0);
-      setPhase("ERROR");
-      setStatus(`Error: ${e?.message ?? "Unknown error"}`);
-    } finally {
+  if (String(e?.message || "").includes("API error 402")) {
+    Alert.alert(
+      "Free analysis used",
+      "You already used your free analysis. Buy 5 more analyses for $1.99.",
+      [{ text: "OK" }]
+    );
+    setPhase("IDLE");
+    setLoading(false);
+    return;
+  }
+
+  setUploadProgress(0);
+  setPhase("ERROR");
+  setStatus(`Error: ${e?.message ?? "Unknown error"}`);
+} finally {
       setLoading(false);
     }
   }

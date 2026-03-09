@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "./config";
+import { getInstallId } from "../utils/installId";
 
 export async function healthCheck() {
   const res = await fetch(`${API_BASE_URL}/health`);
@@ -14,12 +15,15 @@ export async function analyzePdfBase64(pdfBase64: string, filename?: string) {
     filename: filename || "upload.pdf",
   });
 
+  const installId = await getInstallId();
+
   const res = await fetch(`${API_BASE_URL}/api/analyze`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      installId,
       sourceType: "pdf",
-      pdfBase64, // ✅ главное изменение
+      pdfBase64,
       filename: filename || "upload.pdf",
     }),
   });
