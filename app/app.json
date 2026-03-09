@@ -9,6 +9,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
+      "bundleIdentifier": "me.apoteka24.medexplain",
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "MedExplain uses the camera to scan medical documents for analysis.",
