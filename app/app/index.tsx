@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import "react-native-get-random-values";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -14,6 +15,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { iosTheme } from "../src/ui/iosTheme";
 import { Stack } from "expo-router";
+import * as RNIap from "react-native-iap";
 
 function extractSectionsFromAiText(aiText?: string) {
   if (!aiText) return { disclaimer: "", questions: "" };
@@ -59,7 +61,41 @@ export default function HomeScreen() {
   const [phase, setPhase] = useState<Phase>("IDLE");
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("ABNORMAL");
+  useEffect(() => {
+  let purchaseUpdateSubscription: any;
 
+  async function initIAP() {
+    try {
+      await RNIap.initConnection();
+      console.log("IAP connected");
+
+      const products = await (RNIap as any).getProducts(["medexplain.premium"]);
+      console.log("IAP products:", products);
+
+      purchaseUpdateSubscription = RNIap.purchaseUpdatedListener(
+        async (purchase) => {
+          console.log("Purchase success", purchase);
+
+          await RNIap.finishTransaction({ purchase: purchase as any });
+
+Alert.alert(
+  "Purchase successful",
+  "You now have 5 additional analyses."
+);
+        }
+      );
+    } catch (e) {
+      console.log("IAP init error", e);
+    }
+  }
+
+  initIAP();
+
+  return () => {
+    purchaseUpdateSubscription?.remove();
+    RNIap.endConnection();
+  };
+}, []);
   async function onPickAndAnalyzePdf() {
     try {
       setPhase("UPLOADING");
@@ -121,10 +157,22 @@ export default function HomeScreen() {
     } catch (e: any) {
   if (String(e?.message || "").includes("API error 402")) {
     Alert.alert(
-      "Free analysis used",
-      "You already used your free analysis. Buy 5 more analyses for $1.99.",
-      [{ text: "OK" }]
-    );
+  "Free analysis used",
+  "You already used your free analysis. Buy 5 more analyses for $1.99.",
+  [
+    { text: "Cancel", style: "cancel" },
+    {
+  text: "Buy",
+  onPress: async () => {
+    try {
+      await RNIap.requestPurchase("medexplain.premium" as any);
+    } catch (err) {
+      console.log("Purchase error", err);
+    }
+  }
+}
+  ]
+);
     setPhase("IDLE");
     setLoading(false);
     return;

@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "app",
-    "slug": "app",
+    "name": "MedExplain",
+    "slug": "medexplain",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "app",
+    "scheme": "medexplain",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -13,7 +13,8 @@
       "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "MedExplain uses the camera to scan medical documents for analysis.",
-        "NSPhotoLibraryUsageDescription": "MedExplain accesses your photo library to upload medical document images for analysis."
+        "NSPhotoLibraryUsageDescription": "MedExplain accesses your photo library to upload medical document images for analysis.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -53,7 +54,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "e89a4edc-abd8-4eab-9beb-bdde815701b5"
+        "projectId": "0a0bf860-385f-46a5-b4f9-052ece91d7a9"
       }
     }
   }
