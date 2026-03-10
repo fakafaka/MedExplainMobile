@@ -68,6 +68,7 @@ export default function HomeScreen() {
     try {
       await RNIap.initConnection();
       console.log("IAP connected");
+      Alert.alert("IAP", "Connection initialized");
 
       const products = await (RNIap as any).getProducts(["medexplain.premium"]);
       console.log("IAP products:", products);
