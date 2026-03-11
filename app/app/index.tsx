@@ -15,7 +15,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { iosTheme } from "../src/ui/iosTheme";
 import { Stack } from "expo-router";
-import * as RNIap from "react-native-iap";
+import { useIAP, ErrorCode, type Purchase } from "react-native-iap";
 
 function extractSectionsFromAiText(aiText?: string) {
   if (!aiText) return { disclaimer: "", questions: "" };
@@ -51,6 +51,7 @@ type Phase = "IDLE" | "UPLOADING" | "ANALYZING" | "DONE" | "ERROR";
 type Filter = "ALL" | "ABNORMAL";
 
 const API_BASE_URL = "https://med.apoteka24.me";
+const PRODUCT_ID = "medexplain.premium";
 
 export default function HomeScreen() {
   const [status, setStatus] = useState<string>("");
@@ -62,84 +63,129 @@ export default function HomeScreen() {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("ABNORMAL");
   
+    const [purchaseBusy, setPurchaseBusy] = useState(false);
+  const [analysesLeft, setAnalysesLeft] = useState(0);
+
+  const {
+    connected,
+    products,
+    fetchProducts,
+    requestPurchase,
+    finishTransaction,
+  } = useIAP({
+    onPurchaseSuccess: async (purchase: Purchase) => {
+      try {
+        console.log("Purchase success:", JSON.stringify(purchase, null, 2));
+
+        // временно просто прибавляем 5 анализов локально
+        setAnalysesLeft((prev) => prev + 5);
+
+        await finishTransaction({
+          purchase,
+          isConsumable: true,
+        });
+
+        Alert.alert(
+          "Purchase successful",
+          "You now have 5 additional analyses."
+        );
+      } catch (err: any) {
+        console.log("finishTransaction error", err);
+        Alert.alert("Purchase error", err?.message ?? "Unknown error");
+      }
+    },
+    onPurchaseError: (err) => {
+      console.log("purchaseError:", JSON.stringify(err, null, 2));
+
+      if (err.code !== ErrorCode.UserCancelled) {
+        Alert.alert("Purchase error", err?.message || "Unknown purchase error");
+      }
+    },
+  });
+
   useEffect(() => {
-  let purchaseUpdateSubscription: any;
-  let purchaseErrorSubscription: any;
+    async function loadProducts() {
+      try {
+        if (!connected) return;
 
-  async function initIAP() {
+        const loaded = await fetchProducts({
+          skus: [PRODUCT_ID],
+          type: "in-app",
+        });
+
+        console.log("IAP connected:", connected);
+        console.log("Loaded IAP products:", JSON.stringify(loaded, null, 2));
+      } catch (e: any) {
+        console.log("IAP fetchProducts error", e);
+        Alert.alert("IAP init error", e?.message ?? "Unknown error");
+      }
+    }
+
+    loadProducts();
+  }, [connected, fetchProducts]);
+
+  async function startPurchaseFlow() {
     try {
-      await RNIap.initConnection();
-      console.log("IAP connected");
+      setPurchaseBusy(true);
 
-      const products = await (RNIap as any).getProducts({
-        skus: ["medexplain.premium"],
-      });
-      console.log("IAP products:", products);
+      console.log("connected =", connected);
+      console.log("products =", JSON.stringify(products, null, 2));
 
-      purchaseUpdateSubscription = RNIap.purchaseUpdatedListener(
-        async (purchase: any) => {
-          try {
-            console.log("Purchase success", purchase);
-
-            await RNIap.finishTransaction({ purchase, isConsumable: true });
-
-            Alert.alert(
-               "Purchase successful",
-               "You now have 5 additional analyses."
-            );
-          } catch (err) {
-            console.log("finishTransaction error", err);
-            Alert.alert("Purchase error", String(err));
-          }
-        }
+      const product = products.find(
+        (p: any) => p.id === PRODUCT_ID || p.productId === PRODUCT_ID
       );
 
-      purchaseErrorSubscription = RNIap.purchaseErrorListener((err: any) => {
-        console.log("purchaseErrorListener", err);
-        Alert.alert("Purchase error", err?.message || "Unknown purchase error");
+      console.log("selected product =", JSON.stringify(product, null, 2));
+
+      if (!connected) {
+        Alert.alert("Store not connected", "App Store connection is not ready yet.");
+        return;
+      }
+
+      if (!product) {
+        Alert.alert(
+          "Product not loaded",
+          "The in-app purchase item was not returned from App Store."
+        );
+        return;
+      }
+
+      await requestPurchase({
+        request: {
+          apple: {
+            sku: PRODUCT_ID,
+            quantity: 1,
+          },
+          google: {
+            skus: [PRODUCT_ID],
+          },
+        },
+        type: "in-app",
       });
-    } catch (e) {
-      console.log("IAP init error", e);
-      Alert.alert("IAP init error", String(e));
+    } catch (err: any) {
+      console.log("requestPurchase error", err);
+      Alert.alert("Purchase error", err?.message ?? "Unknown purchase error");
+    } finally {
+      setPurchaseBusy(false);
     }
   }
 
-  initIAP();
-
-  return () => {
-    purchaseUpdateSubscription?.remove?.();
-    purchaseErrorSubscription?.remove?.();
-    RNIap.endConnection();
-  };
-}, []);
-function showPurchaseAlert() {
-  Alert.alert(
-    "Free analysis used",
-    "You already used your free analysis. Buy 5 more analyses for $1.99.",
-    [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Buy",
-        onPress: async () => {
-          try {
-            const products = await (RNIap as any).getProducts({
-              skus: ["medexplain.premium"],
-            });
-            console.log("Loaded products:", products);
-
-            await (RNIap as any).requestPurchase({
-              sku: "medexplain.premium",
-              andDangerouslyFinishTransactionAutomaticallyIOS: false,
-            });
-          } catch (err) {
-            console.log("Purchase error", err);
-            Alert.alert("Purchase error", String(err));
-          }
+  function showPurchaseAlert() {
+    Alert.alert(
+      "Free analysis used",
+      "You already used your free analysis. Buy 5 more analyses for $1.99.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: purchaseBusy ? "Please wait..." : "Buy",
+          onPress: () => {
+            void startPurchaseFlow();
+          },
         },
-      },
-    ]
-  );
-}
+      ]
+    );
+  }
+
   async function onPickAndAnalyzePdf() {
     try {
       setPhase("UPLOADING");
@@ -193,7 +239,9 @@ function showPurchaseAlert() {
         base64,
         file.name ?? "upload.pdf"
       );
-
+            if (analysesLeft > 0) {
+        setAnalysesLeft((prev) => prev - 1);
+      }
       setResult(apiResult);
       setUploadProgress(1); // 100%
       setPhase("DONE");
@@ -328,6 +376,9 @@ function showPurchaseAlert() {
         setStatus(`Analyzing ✅ Fetching report: ${json.reportId}...`);
 
         const report = await fetchReport(Number(json.reportId));
+        if (analysesLeft > 0) {
+  setAnalysesLeft((prev) => prev - 1);
+}
         setResult(report);
 
         setPhase("DONE");
@@ -389,16 +440,21 @@ function showPurchaseAlert() {
       setUploadProgress(100);
       setStatus(`Uploaded ✅ Report: ${json.reportId ?? "?"}`);
       if (json?.reportId) {
-      setPhase("ANALYZING");
-      setStatus(`Analyzing ✅ Fetching report: ${json.reportId}...`);
+  setPhase("ANALYZING");
+  setStatus(`Analyzing ✅ Fetching report: ${json.reportId}...`);
 
-      const report = await fetchReport(Number(json.reportId));
-      setResult(report);
+  const report = await fetchReport(Number(json.reportId));
 
-      setPhase("DONE");
-      setUploadProgress(100);
-      setStatus(`Done ✅ Report: ${json.reportId}`);
-      }
+  if (analysesLeft > 0) {
+    setAnalysesLeft((prev) => prev - 1);
+  }
+
+  setResult(report);
+
+  setPhase("DONE");
+  setUploadProgress(100);
+  setStatus(`Done ✅ Report: ${json.reportId}`);
+}
 
       // router.push("/history" as any);
     } catch (e: any) {
@@ -485,6 +541,16 @@ const { disclaimer, questions } = extractSectionsFromAiText(aiText);
   <Text style={{ marginTop: 4, fontSize: 15, color: iosTheme.textSecondary }}>
     Understand your lab results in plain language
   </Text>
+  <Text
+  style={{
+    marginTop: 6,
+    fontSize: 13,
+    color: "#0A84FF",
+    fontWeight: "600",
+  }}
+>
+  Analyses left: {analysesLeft}
+</Text>
 </View>
           {/* Actions */}
 <View style={{ gap: 12 }}>
