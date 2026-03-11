@@ -340,138 +340,151 @@ export default function HomeScreen() {
   }
 
   async function pickPhotosFlow() {
-    try {
-      setResult(null);
-      setExpandedKey(null);
-      setStatus("");
-      setLoading(true);
-      setUploadProgress(0);
-
-      const uris = await pickPhotosFromGallery();
-
-      if (uris.length === 0) {
-        setStatus("Canceled");
-        setPhase("IDLE");
-        return;
-      }
-
-      setPhase("UPLOADING");
-      setStatus(`Uploading ${uris.length} photo(s)...`);
-
-      const json = await uploadImagesToServerWithProgress({
-        apiBaseUrl: API_BASE_URL,
-        imageUris: uris,
-        onProgress: (percent) => {
-  const v = percent > 1 ? percent / 100 : percent; // 0..100 -> 0..1
-  const clamped = Math.max(0, Math.min(1, v));
-  setUploadProgress(clamped);
-},
-      });
-
-      setPhase("DONE");
-      setStatus(`Uploaded ✅ Report: ${json.reportId ?? "?"}`);
-
-      if (json?.reportId) {
-        setPhase("ANALYZING");
-        setStatus(`Analyzing ✅ Fetching report: ${json.reportId}...`);
-
-        const report = await fetchReport(Number(json.reportId));
-        if (analysesLeft > 0) {
-  setAnalysesLeft((prev) => prev - 1);
-}
-        setResult(report);
-
-        setPhase("DONE");
-        setStatus(`Done ✅ Report: ${json.reportId}`);
-      }
-    } catch (e: any) {
-  if (String(e?.message || "").includes("API error 402")) {
-  showPurchaseAlert();
-  setPhase("IDLE");
-  setLoading(false);
-  return;
-}
+  try {
+    if (analysesLeft <= 0) {
+      showPurchaseAlert();
+      setPhase("IDLE");
       setLoading(false);
+      return;
     }
+
+    setResult(null);
+    setExpandedKey(null);
+    setStatus("");
+    setLoading(true);
+    setUploadProgress(0);
+
+    const uris = await pickPhotosFromGallery();
+
+    if (uris.length === 0) {
+      setStatus("Canceled");
+      setPhase("IDLE");
+      return;
+    }
+
+    setPhase("UPLOADING");
+    setStatus(`Uploading ${uris.length} photo(s)...`);
+
+    const json = await uploadImagesToServerWithProgress({
+      apiBaseUrl: API_BASE_URL,
+      imageUris: uris,
+      onProgress: (percent) => {
+        const v = percent > 1 ? percent / 100 : percent;
+        const clamped = Math.max(0, Math.min(1, v));
+        setUploadProgress(clamped);
+      },
+    });
+
+    setUploadProgress(1);
+    setPhase("DONE");
+    setStatus(`Uploaded ✅ Report: ${json.reportId ?? "?"}`);
+
+    if (json?.reportId) {
+      setPhase("ANALYZING");
+      setStatus(`Analyzing ✅ Fetching report: ${json.reportId}...`);
+
+      const report = await fetchReport(Number(json.reportId));
+
+      setAnalysesLeft((prev) => Math.max(0, prev - 1));
+      setResult(report);
+
+      setUploadProgress(1);
+      setPhase("DONE");
+      setStatus(`Done ✅ Report: ${json.reportId}`);
+    }
+  } catch (e: any) {
+    if (String(e?.message || "").includes("API error 402")) {
+      showPurchaseAlert();
+      setPhase("IDLE");
+      return;
+    }
+
+    setUploadProgress(0);
+    setPhase("ERROR");
+    setStatus(`Upload error: ${e?.message ?? "Unknown error"}`);
+  } finally {
+    setLoading(false);
   }
+}
 
   async function takePhotosFlow() {
-    try {
-      setResult(null);
-      setExpandedKey(null);
-      setStatus("");
-      setLoading(true);
-      setUploadProgress(0);
-
-      const uris: string[] = [];
-
-      while (true) {
-        const uri = await takeOnePhoto();
-        if (!uri) break;
-
-        const compressedUri = await compressImageUri(uri);
-        uris.push(compressedUri);
-
-        const more = await askAddAnotherPage();
-        if (!more) break;
-      }
-
-      if (uris.length === 0) {
-        setStatus("Canceled");
-        setPhase("IDLE");
-        return;
-      }
-
-      setPhase("UPLOADING");
-      setStatus(`Uploading ${uris.length} photo(s)...`);
-
-      const json = await uploadImagesToServerWithProgress({
-        apiBaseUrl: API_BASE_URL,
-        imageUris: uris,
-        onProgress: (percent) => {
-  const v = percent > 1 ? percent / 100 : percent; // 0..100 -> 0..1
-  const clamped = Math.max(0, Math.min(1, v));
-  setUploadProgress(clamped);
-},
-      });
-
-      // Backend должен вернуть reportId (мы это сделаем на сервере следующим шагом)
-      setPhase("DONE");
-      setUploadProgress(100);
-      setStatus(`Uploaded ✅ Report: ${json.reportId ?? "?"}`);
-      if (json?.reportId) {
-  setPhase("ANALYZING");
-  setStatus(`Analyzing ✅ Fetching report: ${json.reportId}...`);
-
-  const report = await fetchReport(Number(json.reportId));
-
-  if (analysesLeft > 0) {
-    setAnalysesLeft((prev) => prev - 1);
-  }
-
-  setResult(report);
-
-  setPhase("DONE");
-  setUploadProgress(100);
-  setStatus(`Done ✅ Report: ${json.reportId}`);
-}
-
-      // router.push("/history" as any);
-    } catch (e: any) {
-  if (String(e?.message || "").includes("API error 402")) {
-    showPurchaseAlert();
-    setPhase("IDLE");
-    setLoading(false);
-    return;
-  }
-
-  setPhase("ERROR");
-  setStatus(`Upload error: ${e?.message ?? "Unknown error"}`);
-} finally {
+  try {
+    if (analysesLeft <= 0) {
+      showPurchaseAlert();
+      setPhase("IDLE");
       setLoading(false);
+      return;
     }
-  }
 
+    setResult(null);
+    setExpandedKey(null);
+    setStatus("");
+    setLoading(true);
+    setUploadProgress(0);
+
+    const uris: string[] = [];
+
+    while (true) {
+      const uri = await takeOnePhoto();
+      if (!uri) break;
+
+      const compressedUri = await compressImageUri(uri);
+      uris.push(compressedUri);
+
+      const more = await askAddAnotherPage();
+      if (!more) break;
+    }
+
+    if (uris.length === 0) {
+      setStatus("Canceled");
+      setPhase("IDLE");
+      return;
+    }
+
+    setPhase("UPLOADING");
+    setStatus(`Uploading ${uris.length} photo(s)...`);
+
+    const json = await uploadImagesToServerWithProgress({
+      apiBaseUrl: API_BASE_URL,
+      imageUris: uris,
+      onProgress: (percent) => {
+        const v = percent > 1 ? percent / 100 : percent;
+        const clamped = Math.max(0, Math.min(1, v));
+        setUploadProgress(clamped);
+      },
+    });
+
+    setUploadProgress(1);
+    setPhase("DONE");
+    setStatus(`Uploaded ✅ Report: ${json.reportId ?? "?"}`);
+
+    if (json?.reportId) {
+      setPhase("ANALYZING");
+      setStatus(`Analyzing ✅ Fetching report: ${json.reportId}...`);
+
+      const report = await fetchReport(Number(json.reportId));
+
+      setAnalysesLeft((prev) => Math.max(0, prev - 1));
+      setResult(report);
+
+      setUploadProgress(1);
+      setPhase("DONE");
+      setStatus(`Done ✅ Report: ${json.reportId}`);
+    }
+  } catch (e: any) {
+    if (String(e?.message || "").includes("API error 402")) {
+      showPurchaseAlert();
+      setPhase("IDLE");
+      return;
+    }
+
+    setUploadProgress(0);
+    setPhase("ERROR");
+    setStatus(`Upload error: ${e?.message ?? "Unknown error"}`);
+  } finally {
+    setLoading(false);
+  }
+}
   // ---------- Render ----------
 
   const highlights: any[] = result?.analysis?.highlights || [];
