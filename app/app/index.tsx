@@ -61,42 +61,85 @@ export default function HomeScreen() {
   const [phase, setPhase] = useState<Phase>("IDLE");
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("ABNORMAL");
+  
   useEffect(() => {
   let purchaseUpdateSubscription: any;
+  let purchaseErrorSubscription: any;
 
   async function initIAP() {
     try {
       await RNIap.initConnection();
       console.log("IAP connected");
-      Alert.alert("IAP", "Connection initialized");
 
-      const products = await (RNIap as any).getProducts(["medexplain.premium"]);
+      const products = await (RNIap as any).getProducts({
+        skus: ["medexplain.premium"],
+      });
       console.log("IAP products:", products);
 
       purchaseUpdateSubscription = RNIap.purchaseUpdatedListener(
-        async (purchase) => {
-          console.log("Purchase success", purchase);
+        async (purchase: any) => {
+          try {
+            console.log("Purchase success", purchase);
 
-          await RNIap.finishTransaction({ purchase: purchase as any });
+            await RNIap.finishTransaction({ purchase, isConsumable: true });
 
-Alert.alert(
-  "Purchase successful",
-  "You now have 5 additional analyses."
-);
+            Alert.alert(
+               "Purchase successful",
+               "You now have 5 additional analyses."
+            );
+          } catch (err) {
+            console.log("finishTransaction error", err);
+            Alert.alert("Purchase error", String(err));
+          }
         }
       );
+
+      purchaseErrorSubscription = RNIap.purchaseErrorListener((err: any) => {
+        console.log("purchaseErrorListener", err);
+        Alert.alert("Purchase error", err?.message || "Unknown purchase error");
+      });
     } catch (e) {
       console.log("IAP init error", e);
+      Alert.alert("IAP init error", String(e));
     }
   }
 
   initIAP();
 
   return () => {
-    purchaseUpdateSubscription?.remove();
+    purchaseUpdateSubscription?.remove?.();
+    purchaseErrorSubscription?.remove?.();
     RNIap.endConnection();
   };
 }, []);
+function showPurchaseAlert() {
+  Alert.alert(
+    "Free analysis used",
+    "You already used your free analysis. Buy 5 more analyses for $1.99.",
+    [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Buy",
+        onPress: async () => {
+          try {
+            const products = await (RNIap as any).getProducts({
+              skus: ["medexplain.premium"],
+            });
+            console.log("Loaded products:", products);
+
+            await (RNIap as any).requestPurchase({
+              sku: "medexplain.premium",
+              andDangerouslyFinishTransactionAutomaticallyIOS: false,
+            });
+          } catch (err) {
+            console.log("Purchase error", err);
+            Alert.alert("Purchase error", String(err));
+          }
+        },
+      },
+    ]
+  );
+}
   async function onPickAndAnalyzePdf() {
     try {
       setPhase("UPLOADING");
@@ -155,40 +198,18 @@ Alert.alert(
       setUploadProgress(1); // 100%
       setPhase("DONE");
       setStatus("Done ✅");
-    } catch (e: any) {
-  if (String(e?.message || "").includes("API error 402")) {
-    Alert.alert(
-  "Free analysis used",
-  "You already used your free analysis. Buy 5 more analyses for $1.99.",
-  [
-    { text: "Cancel", style: "cancel" },
-    {
-  text: "Buy",
-  onPress: async () => {
-    Alert.alert("DEBUG", "Buy button pressed");
+        } catch (e: any) {
+      if (String(e?.message || "").includes("API error 402")) {
+        showPurchaseAlert();
+        setPhase("IDLE");
+        setLoading(false);
+        return;
+      }
 
-    try {
-      const products = await (RNIap as any).getProducts(["medexplain.premium"]);
-      console.log("Loaded products:", products);
-
-      await RNIap.requestPurchase("medexplain.premium" as any);
-    } catch (err) {
-      console.log("Purchase error", err);
-      Alert.alert("Purchase error", String(err));
-    }
-  }
-}
-  ]
-);
-    setPhase("IDLE");
-    setLoading(false);
-    return;
-  }
-
-  setUploadProgress(0);
-  setPhase("ERROR");
-  setStatus(`Error: ${e?.message ?? "Unknown error"}`);
-} finally {
+      setUploadProgress(0);
+      setPhase("ERROR");
+      setStatus(`Error: ${e?.message ?? "Unknown error"}`);
+    } finally {
       setLoading(false);
     }
   }
@@ -313,9 +334,12 @@ Alert.alert(
         setStatus(`Done ✅ Report: ${json.reportId}`);
       }
     } catch (e: any) {
-      setPhase("ERROR");
-      setStatus(`Upload error: ${e?.message ?? "Unknown error"}`);
-    } finally {
+  if (String(e?.message || "").includes("API error 402")) {
+  showPurchaseAlert();
+  setPhase("IDLE");
+  setLoading(false);
+  return;
+}
       setLoading(false);
     }
   }
@@ -378,9 +402,16 @@ Alert.alert(
 
       // router.push("/history" as any);
     } catch (e: any) {
-      setPhase("ERROR");
-      setStatus(`Upload error: ${e?.message ?? "Unknown error"}`);
-    } finally {
+  if (String(e?.message || "").includes("API error 402")) {
+    showPurchaseAlert();
+    setPhase("IDLE");
+    setLoading(false);
+    return;
+  }
+
+  setPhase("ERROR");
+  setStatus(`Upload error: ${e?.message ?? "Unknown error"}`);
+} finally {
       setLoading(false);
     }
   }
