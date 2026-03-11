@@ -57,11 +57,28 @@ export async function uploadImagesToServerWithProgress({
     const res = await uploadTask.uploadAsync();
 
     if (!res) throw new Error("No response");
-    if (res.status < 200 || res.status >= 300) {
-      throw new Error(res.body || `HTTP ${res.status}`);
-    }
 
-    lastJson = res.body ? JSON.parse(res.body) : null;
+let parsedBody: any = null;
+try {
+  parsedBody = res.body ? JSON.parse(res.body) : null;
+} catch {
+  parsedBody = null;
+}
+
+if (res.status === 402) {
+  throw new Error("API error 402");
+}
+
+if (res.status < 200 || res.status >= 300) {
+  throw new Error(
+    parsedBody?.error ||
+      parsedBody?.message ||
+      res.body ||
+      `HTTP ${res.status}`
+  );
+}
+
+lastJson = parsedBody;
   }
 
   onProgress?.(100);
