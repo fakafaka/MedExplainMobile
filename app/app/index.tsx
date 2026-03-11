@@ -165,6 +165,8 @@ Alert.alert(
     {
   text: "Buy",
   onPress: async () => {
+    Alert.alert("DEBUG", "Buy button pressed");
+
     try {
       const products = await (RNIap as any).getProducts(["medexplain.premium"]);
       console.log("Loaded products:", products);
@@ -172,6 +174,7 @@ Alert.alert(
       await RNIap.requestPurchase("medexplain.premium" as any);
     } catch (err) {
       console.log("Purchase error", err);
+      Alert.alert("Purchase error", String(err));
     }
   }
 }
